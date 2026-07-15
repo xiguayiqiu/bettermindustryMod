@@ -1,0 +1,129 @@
+apply plugin: "java"
+
+version = '1.0'
+
+sourceSets.main.java.srcDirs = ["src"]
+
+repositories{
+    mavenCentral()
+
+    //Downloads the dependencies JAR file from Mindustry releases; does not use any real repository. Surprisingly, this is the most reliable option.
+    ivy{
+        url = 'https://github.com/'
+        patternLayout{artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar'}
+        metadataSources{ artifact() }
+    }
+
+    //If the version is set to 'latest', downloads the latest Mindustry *release* as a dependency
+    ivy{
+        url = 'https://github.com/'
+        patternLayout{artifact '/[organisation]/[module]/releases/[revision]/download/dependencies.jar'}
+        metadataSources{ artifact() }
+    }
+
+    //For depending on the absolute newest commit for Mindustry
+    ivy{
+        url = 'https://github.com/'
+        patternLayout{artifact '/[organisation]/[module]/releases/download/master/[revision].jar'}
+        metadataSources{ artifact() }
+    }
+}
+
+java{
+    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_17
+}
+
+ext{
+    // Mindustry version to depend on.
+    // Valid values:
+    // - latest: depend on the latest release of mindustry
+    // - be: depend on the very latest commit of mindustry
+    // - v<number>: depend on a specific commit
+    mindustryVersion = "v159.3"
+    isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+    sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: "/tmp/android-sdk"
+}
+
+// jarAndroid 前先验证 SDK 路径
+if(!new File(sdkRoot).exists()){
+    throw new GradleException("Android SDK not found at $sdkRoot. Set ANDROID_HOME or place SDK at /tmp/android-sdk.")
+}
+if(new File("$sdkRoot/platforms/").listFiles()?.find{ f -> new File(f, "android.jar").exists() } == null){
+    throw new GradleException("No android.jar found under $sdkRoot/platforms/. Run: sdkmanager 'platforms;android-34'")
+}
+
+dependencies{
+    compileOnly mindustryVersion == "be" ? "Anuken:MindustryBuilds:latest" : "Anuken:Mindustry:$mindustryVersion"
+}
+
+tasks.register('jarAndroid'){
+    dependsOn "jar"
+    def projectName = project.name
+
+    doLast{
+        if(!sdkRoot || !new File(sdkRoot).exists()) throw new GradleException("No valid Android SDK found. Ensure that ANDROID_HOME is set to your Android SDK directory.")
+
+        def platformsList = new File("$sdkRoot/platforms/").listFiles()
+        def platformRoot = platformsList?.sort()?.reverse()?.find{ f -> new File(f, "android.jar").exists() }
+
+        if(!platformRoot) throw new GradleException("No android.jar found. Ensure that you have an Android platform installed.")
+
+        //collect dependencies needed for desugaring
+        def dependencies = (configurations.compileClasspath.asList() + configurations.runtimeClasspath.asList() + [new File(platformRoot, "android.jar")]).collect{ "--classpath $it.path" }.join(" ")
+
+        def d8 = isWindows ? "d8.bat" : new File("$sdkRoot/build-tools/34.0.0/d8").exists() ? "$sdkRoot/build-tools/34.0.0/d8" : "d8"
+
+        //dex and desugar files - this requires d8 in your PATH
+        "$d8 $dependencies --min-api 14 --output ${projectName}Android.dex.jar ${projectName}Desktop.jar"
+                .execute(null, new File("build/libs")).waitForProcessOutput(System.out, System.err)
+
+        // 将 DEX 合并回完整 jar(含资源),这是手机能用的最终包
+        def androidFinal = new File("build/libs/${projectName}Android.jar")
+        def dexJar = new File("build/libs/${projectName}Android.dex.jar")
+        def deskJar = new File("build/libs/${projectName}Desktop.jar")
+        if(dexJar.exists()){
+            // 从 Desktop jar 复制所有资源,再加上 classes.dex
+            ant.jar(destfile: androidFinal, duplicate: "preserve"){
+                zipfileset(src: deskJar){
+                    // 排除 Desktop 的 class(手机用 DEX)
+                    exclude(name: "**/*.class")
+                }
+                zipfileset(src: dexJar)
+            }
+            dexJar.delete()
+            logger.lifecycle("Android 完整包: ${androidFinal} (${String.format('%.1f', androidFinal.length() / 1024 / 1024)}MB)")
+        }
+    }
+}
+
+jar{
+    archiveFileName = "${project.name}Desktop.jar"
+
+    from{
+        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    }
+
+    from(projectDir){
+        include "mod.hjson"
+    }
+
+    from("assets/"){
+        include "**"
+    }
+}
+
+tasks.register('deploy', Jar){
+    def projectName = project.name
+    dependsOn jarAndroid
+    dependsOn jar
+    archiveFileName = "${projectName}.jar"
+
+    from{ [zipTree("build/libs/${projectName}Desktop.jar"), zipTree("build/libs/${projectName}Android.jar")] }
+
+    doLast{
+        delete{
+            delete "build/libs/${projectName}Android.jar"
+        }
+    }
+}

@@ -1,0 +1,24 @@
+# Gradle 缓存
+.gradle/
+
+# 编译输出
+bin/
+build/
+
+# Java 编译产物
+*.class
+
+# IDE 配置
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS 元数据
+.DS_Store
+Thumbs.db
+
+# 构建产物
+*.jar
