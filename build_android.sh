@@ -1,3 +1,4 @@
 #!/bin/bash
-ANDROID_HOME=/tmp/android-sdk
+ANDROID_HOME=/home/yiqiu/.android
 ./gradlew build jarAndroid
+

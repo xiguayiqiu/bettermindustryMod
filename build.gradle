@@ -1,6 +1,6 @@
 apply plugin: "java"
 
-version = '1.0'
+version = '1.1.0'
 
 sourceSets.main.java.srcDirs = ["src"]
 
@@ -27,6 +27,9 @@ repositories{
         patternLayout{artifact '/[organisation]/[module]/releases/download/master/[revision].jar'}
         metadataSources{ artifact() }
     }
+
+    // For PinyinSearchSupport (pinyin4j)
+    maven{ url = 'https://jitpack.io' }
 }
 
 java{
@@ -42,7 +45,7 @@ ext{
     // - v<number>: depend on a specific commit
     mindustryVersion = "v159.3"
     isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
-    sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: "/tmp/android-sdk"
+    sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: "/home/yiqiu/.android"
 }
 
 // jarAndroid 前先验证 SDK 路径
@@ -55,6 +58,7 @@ if(new File("$sdkRoot/platforms/").listFiles()?.find{ f -> new File(f, "android.
 
 dependencies{
     compileOnly mindustryVersion == "be" ? "Anuken:MindustryBuilds:latest" : "Anuken:Mindustry:$mindustryVersion"
+    implementation "com.belerweb:pinyin4j:2.5.1"
 }
 
 tasks.register('jarAndroid'){
@@ -106,6 +110,7 @@ jar{
 
     from(projectDir){
         include "mod.hjson"
+        include "mod.json"
     }
 
     from("assets/"){
@@ -113,13 +118,14 @@ jar{
     }
 }
 
-tasks.register('deploy', Jar){
+tasks.register('jarAll', Jar){
     def projectName = project.name
     dependsOn jarAndroid
     dependsOn jar
     archiveFileName = "${projectName}.jar"
 
     from{ [zipTree("build/libs/${projectName}Desktop.jar"), zipTree("build/libs/${projectName}Android.jar")] }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     doLast{
         delete{

@@ -1,11 +1,8 @@
-package yiqiu;
+package yiqiu.util;
 
 import arc.*;
 import arc.files.*;
-import arc.freetype.*;
 import arc.util.*;
-import mindustry.*;
-import mindustry.ui.*;
 
 /**
  * 字体管理器

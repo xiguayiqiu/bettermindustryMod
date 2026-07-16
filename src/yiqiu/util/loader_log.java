@@ -1,10 +1,9 @@
-package yiqiu;
+package yiqiu.util;
 
 import arc.*;
 import arc.files.*;
 import arc.util.*;
 import arc.util.Log.*;
-import mindustry.*;
 
 import java.io.*;
 

@@ -1,4 +1,4 @@
-package yiqiu;
+package yiqiu.ui;
 
 import arc.*;
 import arc.struct.*;
@@ -52,9 +52,11 @@ public class TechTreeController{
             int count = 0;
             for(int i = 0; i < TechTree.all.size; i++){
                 TechNode tn = TechTree.all.get(i);
-                if(tn.objectives != null && tn.objectives.size > 0){
-                    tn.objectives.clear();
-                    count++;
+                // 跳过 SectorPreset 类节点（关卡/星球），只清除方块/物品等可研究内容的 objectives
+                if(tn.objectives != null && tn.objectives.size > 0
+                    && !(tn.content instanceof mindustry.type.SectorPreset)){
+                         tn.objectives.clear();
+                         count++;
                 }
             }
             objectivesCleared = true;
