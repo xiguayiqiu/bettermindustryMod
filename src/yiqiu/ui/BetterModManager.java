@@ -59,14 +59,14 @@ public class BetterModManager {
     /** 记录所有 Mod 的原始启用状态 */
     private static void snapshotOriginalStates() {
         originalStates.clear();
-        for (LoadedMod m : mods.getMods()) {
+        for (LoadedMod m : mods.list()) {
             originalStates.put(m.name, m.enabled());
         }
     }
 
     /** 检查是否有 Mod 的启用状态与原始状态不同 */
     private static boolean hasRealChanges() {
-        for (LoadedMod m : mods.getMods()) {
+        for (LoadedMod m : mods.list()) {
             Boolean original = originalStates.get(m.name);
             if (original != null && original != m.enabled()) {
                 return true;
@@ -302,9 +302,11 @@ public class BetterModManager {
 
             String state = getStateText(mod);
             if (state != null) { left.add(state).color(Color.scarlet).growX().wrap(); left.row(); }
-        }).width(420f).growY();
+        }).width(mobile ? Math.min(Core.graphics.getWidth() / Scl.scl(1f) - 40f, 420f) : 420f).growY();
 
-        dialog.buttons.defaults().size(200f, 50f).pad(4f);
+        boolean isPortrait = mobile && Core.graphics.isPortrait();
+        // 收集底部按钮，竖屏时以 2xn 网格排列
+        Seq<Runnable> buttonTasks = new Seq<>();
 
         if (mod.getRepo() != null) {
             String repo = mod.getRepo();
@@ -312,20 +314,29 @@ public class BetterModManager {
             else if (repo.startsWith("http://github.com/")) repo = repo.substring("http://github.com/".length());
             else if (repo.startsWith("github.com/")) repo = repo.substring("github.com/".length());
             final String cleanRepo = repo;
-            dialog.buttons.button("@mods.github.open", Icon.link, () -> Core.app.openURI("https://github.com/" + cleanRepo));
-            dialog.buttons.button("@mods.browser.reinstall", Icon.download, () -> githubImportMod(cleanRepo, mod.isJava(), null, false));
+            addGridButton(dialog.buttons, "@mods.github.open", Icon.link, () -> Core.app.openURI("https://github.com/" + cleanRepo), isPortrait, 0);
+            addGridButton(dialog.buttons, "@mods.browser.reinstall", Icon.download, () -> githubImportMod(cleanRepo, mod.isJava(), null, false), isPortrait, 1);
         } else {
-            dialog.buttons.button("[lightgray]从本地重新安装[]", Icon.download, () -> {
-                try { mods.importMod(mod.file); } catch (Exception ex) { Log.err("[BM] reinstall error", ex); }
-            });
-        }
-        if (!mobile && !mod.meta.hidden) {
-            dialog.buttons.button("@mods.openfolder", Icon.link, () -> Core.app.openFolder(Vars.modDirectory.absolutePath()));
+            addGridButton(dialog.buttons, "[lightgray]从本地重新安装[]", Icon.download, () -> {
+                FileChooser.open("zip", "jar").submitMulti(files -> {
+                    for (var file : files) {
+                        try { mods.importMod(file); } catch (Exception ex) {
+                            ui.showException(ex.getMessage() != null && ex.getMessage().toLowerCase(java.util.Locale.ROOT).contains("writable dex") ? "@error.moddex" : "", ex);
+                        }
+                    }
+                });
+            }, isPortrait, 0);
         }
 
+        // 打开文件夹
+        if (!mobile && !mod.meta.hidden) {
+            addGridButton(dialog.buttons, "@mods.openfolder", Icon.link, () -> Core.app.openFolder(Vars.modDirectory.absolutePath()), isPortrait, isPortrait ? 0 : 99);
+        }
+
+        // 关联内容
         Seq<UnlockableContent> all = collectModContent(mod);
         if (all.any()) {
-            dialog.buttons.button("@mods.viewcontent", Icon.book, () -> {
+            addGridButton(dialog.buttons, "@mods.viewcontent", Icon.book, () -> {
                 BaseDialog d = new BaseDialog(mod.meta.displayName);
                 d.cont.pane(cs -> {
                     int i = 0;
@@ -337,11 +348,23 @@ public class BetterModManager {
                 }).grow();
                 d.addCloseButton();
                 d.show();
-            });
+            }, isPortrait, isPortrait ? 1 : 99);
         }
 
         dialog.addCloseButton();
         dialog.show();
+    }
+
+    /** 辅助：竖屏时按 2 列添加按钮，横屏时水平添加 */
+    private static void addGridButton(Table buttons, String text, Drawable icon, Runnable task, boolean isPortrait, int column) {
+        if (isPortrait) {
+            buttons.defaults().size(140f, 50f).pad(4f);
+            buttons.button(text, icon, task);
+            if (column % 2 == 1) buttons.row();
+        } else {
+            buttons.defaults().size(200f, 50f).pad(4f);
+            buttons.button(text, icon, task);
+        }
     }
 
     private static Seq<UnlockableContent> collectModContent(LoadedMod mod) {

@@ -22,7 +22,7 @@ public class UltimateMendProjector extends MendProjector {
             Items.titanium, 150,
             Items.silicon, 240,
             Items.copper, 300,
-            yiqiu.bettermindustryMod.tripleAlloy, 100
+            yiqiu.bettermindustryMod.tripleAlloy, 10
         ));
 
         researchCost = ItemStack.with(
