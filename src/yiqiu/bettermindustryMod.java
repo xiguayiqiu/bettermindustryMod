@@ -48,6 +48,10 @@ public class bettermindustryMod extends Mod{
     public static Block tripleAlloyCompressor;
     /** 终极修复投影 */
     public static Block ultimateMendProjector;
+    /** 音乐方块 */
+    public static Block musicBlock;
+    /** 眩晕者 */
+    public static Block vertigoBlock;
 
     public bettermindustryMod(){
         loader_log.start();
@@ -538,6 +542,30 @@ public class bettermindustryMod extends Mod{
             Log.info("[BM] 科技树已挂载: 修复投影 → 终极修复投影");
         } else {
             Log.warn("[BM] 无法找到修复投影科技节点");
+        }
+
+        // 注册音乐方块
+        musicBlock = new MusicBlock("music-block");
+
+        // 挂载科技树：核心 → 音乐方块
+        var coreNode = TechTree.all.find(t -> t.content == Blocks.coreShard);
+        if (coreNode != null) {
+            new TechTree.TechNode(coreNode, musicBlock, musicBlock.researchRequirements());
+            Log.info("[BM] 科技树已挂载: 核心 → 音乐方块");
+        } else {
+            Log.warn("[BM] 无法找到核心科技节点");
+        }
+
+        // 注册眩晕者
+        vertigoBlock = new VertigoBlock("vertigo");
+
+        // 挂载科技树：电弧 → 眩晕者（在电弧右边）
+        var arcNode = TechTree.all.find(t -> t.content == Blocks.arc);
+        if (arcNode != null) {
+            new TechTree.TechNode(arcNode, vertigoBlock, vertigoBlock.researchRequirements());
+            Log.info("[BM] 科技树已挂载: 电弧 → 眩晕者");
+        } else {
+            Log.warn("[BM] 无法找到电弧科技节点");
         }
     }
 }

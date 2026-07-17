@@ -66,10 +66,10 @@ public class BetterModManager {
         });
     }
 
-    /** 检测是否已加载 Helium 模组（name=he） */
+    /** 检测是否已启用 Helium 模组（name=he） */
     public static boolean isHeliumLoaded() {
         for (var m : mods.list()) {
-            if ("he".equals(m.name)) return true;
+            if (m.enabled() && "he".equals(m.name)) return true;
         }
         return false;
     }
