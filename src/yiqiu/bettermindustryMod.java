@@ -62,15 +62,18 @@ public class bettermindustryMod extends Mod{
         // 2. 安装拼音搜索模块
         PinyinSearchMod.build();
 
-        // 3. 在 ClientLoadEvent 中注册设置(此时 settings 菜单已构建)
+        // 3. 初始化 fcitx5 中文输入支持（需在 registerBMSettings 之前注册事件）
+        Fcitx5Support.init();
+
+        // 4. 在 ClientLoadEvent 中注册设置(此时 settings 菜单已构建)
         Events.on(ClientLoadEvent.class, e -> {
             registerBMSettings();
         });
 
-        // 4. 启动科技树控制器
+        // 5. 启动科技树控制器
         TechTreeController.hook();
 
-        // 5. 注册模组管理到游戏设置
+        // 6. 注册模组管理到游戏设置
         BetterModManager.hook();
 
         Log.info("[BM] 初始化完成 (kai-font 启用=@)", FontManager.isKaiFontEnabled());
@@ -238,9 +241,101 @@ public class bettermindustryMod extends Mod{
             table.row();
             addHint(table, "[#888888]输入停止后等待多长时间开始搜索。0=即时搜索，推荐 120ms。[]");
 
+            // ============ Linux 输入法 ============
+            addSection(table, "Linux 输入法");
+
+            if(Fcitx5Support.isAvailable()){
+                addToggleRow(table, "[#ff8844][实验性] fcitx5 中文输入支持[]", box -> {
+                    box.update(() -> box.setChecked(Fcitx5Support.isEnabled()));
+                    box.changed(() -> Fcitx5Support.setEnabled(box.isChecked()));
+                });
+
+                var modeLabel = new Label("[#888888]输入模式: ...");
+                modeLabel.setWrap(true);
+                table.add(modeLabel).width(Math.min(500f, Core.graphics.getWidth() / 1.2f / Scl.scl(1f))).padTop(8f).left();
+                table.row();
+
+                Table modeRow = new Table();
+                modeRow.left();
+                ButtonGroup<Button> group = new ButtonGroup<>();
+                String[] modeNames = {"原生对话框 (F2)", "SDL IME"};
+                boolean[] modeVals = {true, false};
+                for(int i = 0; i < 2; i++){
+                    final boolean isDialog = modeVals[i];
+                    Button btn = new Button(Styles.togglet);
+                    btn.add("[#ff8844]" + (i == 0 ? "[实验性]" : "") + "[]" + modeNames[i]);
+                    btn.clicked(() -> {
+                        Fcitx5Support.setDialogMode(isDialog);
+                        Fcitx5Support.setEnabled(true);
+                    });
+                    group.add(btn);
+                    modeRow.add(btn).padRight(8f);
+                    if(i < 1) modeRow.add().width(12f);
+                }
+                modeRow.update(() -> {
+                    boolean cur = Fcitx5Support.isDialogMode();
+                    var btns = group.getButtons();
+                    if(btns.size >= 2){
+                        btns.get(0).setChecked(cur);
+                        btns.get(1).setChecked(!cur);
+                    }
+                });
+                table.add(modeRow).padTop(4f).left();
+                table.row();
+
+                addHint(table, "[#ff8844]⚠ 实验性功能 — 可能需要额外配置 fcitx5。[]\n"
+                    + "[#888888]「原生对话框」模式按 F2 打开系统输入框，fcitx5 可正常工作。\n"
+                    + "「SDL IME」模式使用 SDL2 原生 IME（部分系统 fcitx5 不支持）。\n"
+                    + "诊断: " + Fcitx5Support.diagString() + "[]");
+
+                // 刷新诊断信息的按钮
+                addActionRow(table, "[#888888]刷新输入法诊断[]", () -> {
+                    Vars.ui.showInfo("[#888888]fcitx5 诊断:\n" + Fcitx5Support.diagString() + "[]");
+                });
+            }else{
+                addDisableRow(table, "[#888888]fcitx5 中文输入支持（仅 Linux 桌面版可用）[]");
+                addHint(table, "[#888888]未检测到 SDL 桌面后端，此功能仅 Linux 桌面版可用。[]");
+            }
+
+            // ============ 模组管理 ============
+            addSection(table, "模组管理");
+
+            if(BetterModManager.isHeliumLoaded()){
+                addDisableRow(table, "[#7fff7f]更好的模组管理[]");
+                addHint(table, "[#88ff88]检测到更优秀的 Helium UI 模组已加载，\n"
+                    + "其模组管理功能更完善，已自动禁用本模组的模组管理以避免重复。[]");
+            }else{
+                addToggleRow(table, "[#7fff7f]更好的模组管理[]", box -> {
+                    box.update(() -> box.setChecked(Core.settings.getBool("bm-mod-manager-enabled", true)));
+                    box.changed(() -> {
+                        boolean val = box.isChecked();
+                        Core.settings.put("bm-mod-manager-enabled", val);
+                        showRestartDialog("[#fbd24d]需要重启游戏[]",
+                            val
+                                ? "已启用更好的模组管理，重启游戏后生效。"
+                                : "已禁用更好的模组管理，重启游戏后生效。",
+                            null);
+                    });
+                });
+                addHint(table, "[#888888]启用后，游戏设置中会添加「模组管理」分类页，\n"
+                    + "提供已启用/禁用模组双栏管理，支持按类型分类和搜索。\n"
+                    + "更改需重启游戏生效。[]");
+            }
+
             // ============ 关于 ============
             addSection(table, "关于");
-            addHint(table, "[#888888]更好的像素工厂 v1.0.0\n作者: 弈秋忘忧白帽\n"
+
+            String modVersion = "?";
+            try{
+                for(var m : Vars.mods.list()){
+                    if("bettermindustry".equals(m.name)){
+                        modVersion = m.meta.version;
+                        break;
+                    }
+                }
+            }catch(Throwable ignored){}
+
+            addHint(table, "[#888888]更好的像素工厂 v" + modVersion + "\n作者: 弈秋忘忧白帽\n"
                 + "如果遇到 Bug 或功能建议,请在 GitHub 提交 Issue。[]");
         });
 

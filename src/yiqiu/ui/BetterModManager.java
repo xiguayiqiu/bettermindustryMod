@@ -36,6 +36,16 @@ public class BetterModManager {
     /** 注册到游戏设置：添加「模组管理」分类页 */
     public static void hook() {
         Events.on(ClientLoadEvent.class, e -> {
+            boolean heliumLoaded = isHeliumLoaded();
+            boolean toggleOn = Core.settings.getBool("bm-mod-manager-enabled", true);
+
+            if (!toggleOn || heliumLoaded) {
+                if (heliumLoaded) {
+                    Log.info("[BM] Helium 模组已加载（提供更优的模组管理 UI），更好的模组管理已自动禁用");
+                }
+                return;
+            }
+
             Vars.ui.settings.addCategory("模组管理", Icon.book, table -> {
                 // 进入模组管理页面时记录各 Mod 的原始启用状态
                 snapshotOriginalStates();
@@ -54,6 +64,14 @@ public class BetterModManager {
 
             Log.info("[BM] 模组管理已添加到游戏设置");
         });
+    }
+
+    /** 检测是否已加载 Helium 模组（name=he） */
+    public static boolean isHeliumLoaded() {
+        for (var m : mods.list()) {
+            if ("he".equals(m.name)) return true;
+        }
+        return false;
     }
 
     /** 记录所有 Mod 的原始启用状态 */
@@ -121,21 +139,48 @@ public class BetterModManager {
 
         table.row();
 
-        // 双栏
+        // 双栏区域 — 动态响应横竖屏切换
+        Table dualPane = new Table();
+        dualPane.top().left();
+
+        boolean[] lastPortrait = {isPortrait};
+
+        Runnable[] rebuildDualPane = new Runnable[1];
+        rebuildDualPane[0] = () -> {
+            dualPane.clear();
+            buildDualPane(dualPane, mobile && Core.graphics.isPortrait());
+            refreshModLists();
+        };
+
+        rebuildDualPane[0].run();
+
+        dualPane.update(() -> {
+            boolean currentPortrait = mobile && Core.graphics.isPortrait();
+            if (currentPortrait != lastPortrait[0]) {
+                lastPortrait[0] = currentPortrait;
+                rebuildDualPane[0].run();
+            }
+        });
+
+        table.add(dualPane).grow();
+    }
+
+    /** 构建双栏布局（上下/左右），按当前横竖屏状态 */
+    private static void buildDualPane(Table dualPane, boolean isPortrait) {
         if (isPortrait) {
             // 竖屏：上下
-            table.table(top -> {
+            dualPane.table(top -> {
                 top.top().left();
                 top.add("[accent]" + Core.bundle.get("bm.bettermodmanager.enabled") + "[]").left().padBottom(2f);
                 top.row();
                 top.table(inner -> { inner.top().left(); enabledList = inner; }).grow();
             }).grow().padBottom(2f);
 
-            table.row();
-            table.image(Tex.whiteui, Pal.gray).height(2f).growX().padLeft(10f).padRight(10f);
-            table.row();
+            dualPane.row();
+            dualPane.image(Tex.whiteui, Pal.gray).height(2f).growX().padLeft(10f).padRight(10f);
+            dualPane.row();
 
-            table.table(bottom -> {
+            dualPane.table(bottom -> {
                 bottom.top().left();
                 bottom.add("[accent]" + Core.bundle.get("bm.bettermodmanager.disabled") + "[]").left().padBottom(2f);
                 bottom.row();
@@ -143,7 +188,7 @@ public class BetterModManager {
             }).grow().padTop(2f);
         } else {
             // 横屏/桌面：左右
-            table.table(main -> {
+            dualPane.table(main -> {
                 main.table(leftWrap -> {
                     leftWrap.top().left();
                     leftWrap.add("[accent]" + Core.bundle.get("bm.bettermodmanager.enabled") + "[]").left().padBottom(4f);
@@ -161,8 +206,6 @@ public class BetterModManager {
                 }).grow().padLeft(4f);
             }).grow();
         }
-
-        refreshModLists();
     }
 
     /** 刷新模组列表（不重建整个页面） */
@@ -305,19 +348,38 @@ public class BetterModManager {
         }).width(mobile ? Math.min(Core.graphics.getWidth() / Scl.scl(1f) - 40f, 420f) : 420f).growY();
 
         boolean isPortrait = mobile && Core.graphics.isPortrait();
-        // 收集底部按钮，竖屏时以 2xn 网格排列
-        Seq<Runnable> buttonTasks = new Seq<>();
 
+        buildDialogButtons(dialog.buttons, mod, isPortrait);
+        dialog.addCloseButton();
+
+        boolean[] lastPortrait = {isPortrait};
+        dialog.update(() -> {
+            boolean currentPortrait = mobile && Core.graphics.isPortrait();
+            if (currentPortrait != lastPortrait[0]) {
+                lastPortrait[0] = currentPortrait;
+                dialog.buttons.clearChildren();
+                dialog.buttons.defaults().reset();
+                buildDialogButtons(dialog.buttons, mod, currentPortrait);
+                dialog.addCloseButton();
+            }
+        });
+
+        dialog.show();
+    }
+
+    /** 构建 Mod 详情弹窗底部按钮 */
+    private static void buildDialogButtons(Table buttons, LoadedMod mod, boolean isPortrait) {
+        String repo = null;
         if (mod.getRepo() != null) {
-            String repo = mod.getRepo();
+            repo = mod.getRepo();
             if (repo.startsWith("https://github.com/")) repo = repo.substring("https://github.com/".length());
             else if (repo.startsWith("http://github.com/")) repo = repo.substring("http://github.com/".length());
             else if (repo.startsWith("github.com/")) repo = repo.substring("github.com/".length());
             final String cleanRepo = repo;
-            addGridButton(dialog.buttons, "@mods.github.open", Icon.link, () -> Core.app.openURI("https://github.com/" + cleanRepo), isPortrait, 0);
-            addGridButton(dialog.buttons, "@mods.browser.reinstall", Icon.download, () -> githubImportMod(cleanRepo, mod.isJava(), null, false), isPortrait, 1);
+            addGridButton(buttons, "@mods.github.open", Icon.link, () -> Core.app.openURI("https://github.com/" + cleanRepo), isPortrait, 0);
+            addGridButton(buttons, "@mods.browser.reinstall", Icon.download, () -> githubImportMod(cleanRepo, mod.isJava(), null, false), isPortrait, 1);
         } else {
-            addGridButton(dialog.buttons, "[lightgray]从本地重新安装[]", Icon.download, () -> {
+            addGridButton(buttons, "[lightgray]从本地重新安装[]", Icon.download, () -> {
                 FileChooser.open("zip", "jar").submitMulti(files -> {
                     for (var file : files) {
                         try { mods.importMod(file); } catch (Exception ex) {
@@ -328,15 +390,13 @@ public class BetterModManager {
             }, isPortrait, 0);
         }
 
-        // 打开文件夹
         if (!mobile && !mod.meta.hidden) {
-            addGridButton(dialog.buttons, "@mods.openfolder", Icon.link, () -> Core.app.openFolder(Vars.modDirectory.absolutePath()), isPortrait, isPortrait ? 0 : 99);
+            addGridButton(buttons, "@mods.openfolder", Icon.link, () -> Core.app.openFolder(Vars.modDirectory.absolutePath()), isPortrait, isPortrait ? 0 : 99);
         }
 
-        // 关联内容
         Seq<UnlockableContent> all = collectModContent(mod);
         if (all.any()) {
-            addGridButton(dialog.buttons, "@mods.viewcontent", Icon.book, () -> {
+            addGridButton(buttons, "@mods.viewcontent", Icon.book, () -> {
                 BaseDialog d = new BaseDialog(mod.meta.displayName);
                 d.cont.pane(cs -> {
                     int i = 0;
@@ -350,9 +410,6 @@ public class BetterModManager {
                 d.show();
             }, isPortrait, isPortrait ? 1 : 99);
         }
-
-        dialog.addCloseButton();
-        dialog.show();
     }
 
     /** 辅助：竖屏时按 2 列添加按钮，横屏时水平添加 */

@@ -3,7 +3,7 @@
   "name": "bettermindustry",
   "author": "弈秋忘忧白帽",
   "main": "yiqiu.bettermindustryMod",
-  "description": "[white]更好的Mindustry游戏体验[]\n[lightgray]目前功能：[]\n[accent]字体设置[] [green]科技树显示[] [gold]游戏时间[] [cyan]核心资源显示[] [orange]更好的模组管理[] [purple]极限视野[] [#7fff7f]拼音搜索支持[]",
+  "description": "[white]更好的Mindustry游戏体验[]\n[lightgray]目前功能：[]\n[accent]字体设置[] [green]科技树显示[] [gold]游戏时间[] [cyan]核心资源显示[] [orange]更好的模组管理[] [purple]极限视野[] [#7fff7f]拼音搜索支持[] [#7fff7f]fcitx5中文输入[]",
   "version": "1.1.0",
   "repo": "https://github.com/xiguayiqiu/bettermindustryMod",
   "minGameVersion": 158,
